@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RAG Simulator — See How Retrieval-Augmented Generation Works</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --bg: #0a0f1c;
+    --bg-grid: #0d1526;
+    --panel: #121a2b;
+    --panel-hi: #172136;
+    --border: #263354;
+    --text: #edf1f9;
+    --text-dim: #93a0be;
+    --text-faint: #576082;
+    --amber: #ffa857;
+    --amber-dim: #7a5a34;
+    --cyan: #5fc9f8;
+    --cyan-dim: #315a6e;
+    --green: #6ee7a8;
+    --green-dim: #2f5c47;
+    --violet: #b296ff;
+    --radius: 14px;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(95,201,248,0.08), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(255,168,87,0.06), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 32px 20px 80px;
+  }
+
+  .wrap{ max-width: 1180px; margin: 0 auto; }
+
+  /* ---------- Header ---------- */
+  header{ margin-bottom: 28px; }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;
+    color: var(--cyan); text-transform: uppercase;
+    background: rgba(95,201,248,0.08); border: 1px solid var(--cyan-dim);
+    padding: 5px 10px; border-radius: 999px; margin-bottom: 14px;
+  }
+  .eyebrow .dot{ width:6px; height:6px; border-radius:50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+  h1{
+    font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(28px, 4vw, 42px); letter-spacing: -0.02em;
+    margin: 0 0 10px; color: #fff;
+  }
+  header p.sub{
+    color: var(--text-dim); font-size: 15.5px; max-width: 680px; margin: 0;
+  }
+  header p.sub strong{ color: var(--text); font-weight: 600; }
+  .note-2d{
+    margin-top: 14px; display:flex; gap:8px; align-items:flex-start;
+    font-size: 13px; color: var(--text-faint); max-width: 680px;
+  }
+  .note-2d svg{ flex-shrink:0; margin-top: 2px; }
+
+  /* ---------- Stage A strip ---------- */
+  .stageA{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    margin-bottom: 26px;
+  }
+  .stageA-head{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
+  }
+  .stageA-title{
+    font-family: var(--font-mono); font-size: 12.5px; letter-spacing: 0.05em;
+    color: var(--text-dim); text-transform: uppercase;
+  }
+  .stageA-title b{ color: var(--text); }
+  .stageA-tag{
+    font-size: 12px; color: var(--text-faint); font-family: var(--font-mono);
+  }
+  .stageA-flow{
+    display:flex; align-items:center; gap: 10px; overflow-x:auto; padding-bottom: 4px;
+  }
+  .sa-block{
+    display:flex; flex-direction:column; align-items:center; gap: 8px; flex-shrink:0;
+  }
+  .sa-label{ font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); white-space:nowrap; }
+  .sa-docs{ display:flex; gap:3px; }
+  .sa-doc{ width:10px; height:14px; background: var(--text-faint); border-radius: 2px; opacity:0.5; }
+  .sa-chunks{ display:grid; grid-template-columns: repeat(4,7px); gap:3px; }
+  .sa-chunk{ width:7px; height:7px; background: var(--cyan-dim); border: 1px solid var(--cyan); border-radius:2px; }
+  .sa-vecs{ display:grid; grid-template-columns: repeat(4,7px); gap:3px; }
+  .sa-vec{ width:6px; height:6px; border-radius:50%; background: var(--cyan); box-shadow: 0 0 5px rgba(95,201,248,0.7); }
+  .sa-db{
+    width: 34px; height: 30px; position:relative;
+    border: 1.5px solid var(--amber); border-top: none;
+    border-radius: 0 0 8px 8px;
+    background: rgba(255,168,87,0.08);
+  }
+  .sa-db::before{
+    content:''; position:absolute; top:-6px; left:-1.5px; right:-1.5px; height:12px;
+    border: 1.5px solid var(--amber); border-radius: 50%; background: var(--panel-hi);
+  }
+  .sa-arrow{ color: var(--text-faint); font-size: 16px; flex-shrink:0; }
+
+  /* ---------- Stepper ---------- */
+  .stepper{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    margin: 0 0 26px; position:relative; gap: 4px;
+  }
+  .step-node{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    flex:1; position:relative; cursor:pointer; background:none; border:none; color:inherit; font-family:inherit;
+    padding: 4px;
+  }
+  .step-node .circle{
+    width: 34px; height:34px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--font-mono); font-weight:500; font-size:14px;
+    background: var(--panel); border: 1.5px solid var(--border); color: var(--text-faint);
+    transition: all 0.25s ease; position:relative; z-index:2;
+  }
+  .step-node .line{
+    position:absolute; top:17px; left:50%; width:100%; height:1.5px;
+    background: var(--border); z-index:1;
+  }
+  .step-node:last-child .line{ display:none; }
+  .step-node .lbl{ font-size:11.5px; color: var(--text-faint); text-align:center; max-width: 90px; transition: color 0.25s ease;}
+  .step-node.done .circle{ background: var(--green-dim); border-color: var(--green); color: var(--green); }
+  .step-node.done .line{ background: var(--green-dim); }
+  .step-node.active .circle{ background: var(--amber); border-color: var(--amber); color: #1a1206; box-shadow: 0 0 0 4px rgba(255,168,87,0.15); }
+  .step-node.active .lbl{ color: var(--text); font-weight:600; }
+  .step-node.done .lbl{ color: var(--text-dim); }
+  .step-node:disabled{ cursor: not-allowed; }
+
+  /* ---------- Main stage ---------- */
+  .stage{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    min-height: 460px;
+    display:flex; flex-direction:column;
+  }
+  .stage-head{ margin-bottom: 18px; }
+  .stage-head .kicker{ font-family: var(--font-mono); font-size:12px; color: var(--amber); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:6px;}
+  .stage-head h2{ font-family: var(--font-display); font-size: 22px; margin: 0 0 8px; color:#fff; }
+  .stage-head p{ color: var(--text-dim); font-size: 14.5px; max-width: 620px; margin:0; }
+  .stage-head p strong{ color: var(--text); }
+  .stage-body{ flex:1; display:flex; gap: 26px; }
+
+  @media (max-width: 860px){
+    .stage-body{ flex-direction: column; }
+  }
+
+  /* ---------- Step 1: query ---------- */
+  .query-panel{ max-width: 640px; margin: 0 auto; width:100%; }
+  .query-row{ display:flex; gap:10px; margin-bottom: 18px; }
+  .query-row input{
+    flex:1; background: var(--bg-grid); border: 1.5px solid var(--border);
+    color: var(--text); font-size: 15px; padding: 13px 16px; border-radius: 10px;
+    font-family: var(--font-body); outline: none; transition: border-color 0.2s;
+  }
+  .query-row input:focus{ border-color: var(--amber); }
+  .query-row input::placeholder{ color: var(--text-faint); }
+  .btn{
+    font-family: var(--font-display); font-weight:600; font-size: 14px;
+    padding: 12px 20px; border-radius: 10px; border: none; cursor:pointer;
+    transition: all 0.15s ease; white-space:nowrap;
+  }
+  .btn:focus-visible{ outline: 2px solid var(--amber); outline-offset:2px; }
+  .btn-primary{ background: var(--amber); color: #1a1206; }
+  .btn-primary:hover{ filter: brightness(1.08); transform: translateY(-1px); }
+  .btn-primary:disabled{ background: var(--border); color: var(--text-faint); cursor:not-allowed; transform:none; }
+  .btn-ghost{ background: transparent; color: var(--text-dim); border: 1.5px solid var(--border); }
+  .btn-ghost:hover{ border-color: var(--text-dim); color: var(--text); }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom: 6px;}
+  .chip{
+    background: var(--bg-grid); border: 1px solid var(--border); color: var(--text-dim);
+    font-size: 13px; padding: 8px 13px; border-radius: 999px; cursor:pointer;
+    transition: all 0.15s ease; font-family: var(--font-body);
+  }
+  .chip:hover{ border-color: var(--cyan); color: var(--text); }
+  .chips-label{ font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px; }
+
+  /* ---------- Vector plot (shared steps 2-4) ---------- */
+  .plot-col{ flex: 1.15; min-width: 0; }
+  .plot-frame{
+    background: var(--bg-grid); border: 1px solid var(--border); border-radius: 12px;
+    position:relative; overflow:hidden;
+  }
+  .plot-frame svg{ display:block; width:100%; height:auto; }
+  .grid-line{ stroke: rgba(255,255,255,0.035); stroke-width:1; }
+  .chunk-dot{ fill: var(--cyan); stroke: rgba(95,201,248,0.35); stroke-width:6px; transition: all 0.3s ease; }
+  .chunk-dot.dim{ opacity:0.28; }
+  .chunk-dot.top{ fill: var(--green); stroke: rgba(110,231,168,0.35); }
+  .chunk-label{ fill: var(--text-faint); font-family: var(--font-mono); font-size: 9px; }
+  .query-dot{ fill: var(--amber); stroke: rgba(255,168,87,0.4); stroke-width:8px; }
+  .sim-line{ stroke: var(--text-faint); stroke-width:1; opacity:0; fill:none; }
+  .sim-line.top{ stroke: var(--green); stroke-width:1.75; }
+  .sim-label{ fill: var(--text-dim); font-family: var(--font-mono); font-size:9px; opacity:0; }
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; padding: 12px 6px 0; font-size:12px; color: var(--text-faint); }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .legend i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+
+  /* ---------- Side / info column ---------- */
+  .info-col{ flex:1; min-width:0; display:flex; flex-direction:column; gap:14px; }
+
+  .vec-readout{
+    background: var(--bg-grid); border:1px solid var(--border); border-radius:10px;
+    padding: 14px 16px; font-family: var(--font-mono); font-size: 12.5px; color: var(--cyan);
+    word-break: break-all; line-height:1.6;
+  }
+  .vec-readout .tag{ color: var(--text-faint); display:block; margin-bottom:6px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
+
+  .rank-list{ display:flex; flex-direction:column; gap:8px; }
+  .rank-item{
+    display:flex; align-items:center; gap:10px; background: var(--bg-grid);
+    border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px;
+    transition: border-color 0.2s;
+  }
+  .rank-item.top{ border-color: var(--green); background: rgba(110,231,168,0.06); }
+  .rank-topic{ flex:1; font-size:13px; color: var(--text); }
+  .rank-bar-track{ width:70px; height:5px; background: var(--border); border-radius:3px; overflow:hidden; flex-shrink:0; }
+  .rank-bar-fill{ height:100%; background: var(--text-faint); border-radius:3px; }
+  .rank-item.top .rank-bar-fill{ background: var(--green); }
+  .rank-score{ font-family: var(--font-mono); font-size:11.5px; color: var(--text-faint); width:36px; text-align:right; flex-shrink:0; }
+  .rank-item.top .rank-score{ color: var(--green); }
+  .rank-badge{ font-family: var(--font-mono); font-size:10px; color: var(--green); background: rgba(110,231,168,0.12); border:1px solid var(--green-dim); padding: 1px 6px; border-radius:5px; flex-shrink:0; }
+
+  .chunk-card{
+    background: var(--bg-grid); border:1px solid var(--border); border-radius:10px;
+    padding: 13px 15px; display:flex; flex-direction:column; gap:6px;
+    animation: cardIn 0.4s ease both;
+  }
+  @keyframes cardIn{ from{ opacity:0; transform: translateY(8px);} to{opacity:1; transform:translateY(0);} }
+  .chunk-card-head{ display:flex; align-items:center; justify-content:space-between; }
+  .chunk-card-topic{ font-size:12.5px; font-weight:600; color: var(--green); }
+  .chunk-card-num{ font-family: var(--font-mono); font-size:11px; color: var(--text-faint); }
+  .chunk-card-text{ font-size:13px; color: var(--text-dim); line-height:1.5; }
+
+  /* ---------- Prompt assembly (step 5) ---------- */
+  .prompt-box{
+    background: var(--bg-grid); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-dim);
+    line-height: 1.7; width:100%;
+  }
+  .prompt-block{ margin-bottom:14px; opacity:0; animation: blockIn 0.45s ease forwards; }
+  .prompt-block:last-child{ margin-bottom:0; }
+  @keyframes blockIn{ from{opacity:0; transform: translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .prompt-tag{ display:inline-block; font-size:10.5px; letter-spacing:0.06em; padding:2px 8px; border-radius:5px; margin-bottom:7px; }
+  .tag-system{ background: rgba(255,168,87,0.12); color: var(--amber); border:1px solid var(--amber-dim); }
+  .tag-context{ background: rgba(110,231,168,0.12); color: var(--green); border:1px solid var(--green-dim); }
+  .tag-user{ background: rgba(95,201,248,0.12); color: var(--cyan); border:1px solid var(--cyan-dim); }
+  .prompt-context-item{ padding-left:12px; border-left: 2px solid var(--green-dim); margin: 6px 0; color: var(--text-dim); }
+  .prompt-context-item b{ color: var(--text); }
+
+  /* ---------- Answer (step 6) ---------- */
+  .answer-wrap{ width:100%; }
+  .thinking{ display:flex; align-items:center; gap:8px; color: var(--text-faint); font-family: var(--font-mono); font-size:13px; margin-bottom:16px; }
+  .thinking .dots{ display:flex; gap:4px; }
+  .thinking .dots i{ width:6px; height:6px; border-radius:50%; background: var(--violet); animation: pulse 1.1s ease-in-out infinite; }
+  .thinking .dots i:nth-child(2){ animation-delay:0.15s; }
+  .thinking .dots i:nth-child(3){ animation-delay:0.3s; }
+  @keyframes pulse{ 0%,100%{opacity:0.25; transform:scale(0.8);} 50%{opacity:1; transform:scale(1);} }
+
+  .answer-box{
+    background: linear-gradient(180deg, rgba(178,150,255,0.06), transparent 40%), var(--bg-grid);
+    border: 1px solid var(--border); border-left: 3px solid var(--violet);
+    border-radius: 10px; padding: 18px 20px;
+  }
+  .answer-snippet{ opacity:0; font-size:14.5px; color: var(--text); line-height:1.6; margin-bottom:10px; animation: snippetIn 0.5s ease forwards; }
+  .answer-snippet:last-child{ margin-bottom:0; }
+  @keyframes snippetIn{ from{opacity:0; transform: translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .cite{
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--green);
+    background: rgba(110,231,168,0.12); border:1px solid var(--green-dim);
+    padding: 1px 5px; border-radius: 4px; margin-left:4px; white-space:nowrap;
+  }
+  .answer-note{ margin-top:14px; font-size:12.5px; color: var(--text-faint); display:flex; gap:8px; }
+
+  /* ---------- Controls ---------- */
+  .controls{
+    display:flex; justify-content:space-between; align-items:center; margin-top: 22px; gap: 10px; flex-wrap: wrap;
+  }
+  .controls-left, .controls-right{ display:flex; gap:10px; }
+
+  footer{ text-align:center; margin-top: 30px; color: var(--text-faint); font-size: 12.5px; font-family: var(--font-mono); }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  @media (max-width: 640px){
+    .stepper{ flex-wrap: wrap; row-gap: 18px; }
+    .step-node{ flex: 0 0 30%; }
+    .step-node .line{ display:none; }
+    .stage{ padding: 20px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow"><span class="dot"></span> Interactive simulator</div>
+    <h1>RAG, one step at a time</h1>
+    <p class="sub">Ask a question of a small fictional support knowledge base and watch it move through every stage of <strong>Retrieval-Augmented Generation</strong> — from embedding to the final, grounded answer.</p>
+    <div class="note-2d">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9.5" stroke="#576082" stroke-width="1.5"/><path d="M12 8v5" stroke="#576082" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="16" r="0.9" fill="#576082"/></svg>
+      <span>Real embeddings have hundreds of dimensions. This simulator plots them in 2D so the similarity search is visible — the mechanics are the same, just simplified to fit a screen.</span>
+    </div>
+  </header>
+
+  <!-- STAGE A: Indexing, done once -->
+  <div class="stageA">
+    <div class="stageA-head">
+      <div class="stageA-title"><b>Stage A</b> · Indexing — done once, ahead of time</div>
+      <div class="stageA-tag">independent of any future query</div>
+    </div>
+    <div class="stageA-flow">
+      <div class="sa-block"><div class="sa-docs"><div class="sa-doc"></div><div class="sa-doc"></div><div class="sa-doc"></div></div><div class="sa-label">Source docs</div></div>
+      <div class="sa-arrow">→</div>
+      <div class="sa-block"><div class="sa-chunks">
+        <div class="sa-chunk"></div><div class="sa-chunk"></div><div class="sa-chunk"></div><div class="sa-chunk"></div>
+        <div class="sa-chunk"></div><div class="sa-chunk"></div><div class="sa-chunk"></div><div class="sa-chunk"></div>
+      </div><div class="sa-label">8 chunks</div></div>
+      <div class="sa-arrow">→</div>
+      <div class="sa-block"><div class="sa-vecs">
+        <div class="sa-vec"></div><div class="sa-vec"></div><div class="sa-vec"></div><div class="sa-vec"></div>
+        <div class="sa-vec"></div><div class="sa-vec"></div><div class="sa-vec"></div><div class="sa-vec"></div>
+      </div><div class="sa-label">8 vectors</div></div>
+      <div class="sa-arrow">→</div>
+      <div class="sa-block"><div class="sa-db"></div><div class="sa-label">Vector DB</div></div>
+    </div>
+  </div>
+
+  <!-- STEPPER -->
+  <nav class="stepper" id="stepper" aria-label="RAG steps"></nav>
+
+  <!-- MAIN STAGE -->
+  <div class="stage" id="stage">
+    <!-- content injected by JS -->
+  </div>
+
+  <div class="controls">
+    <div class="controls-left">
+      <button class="btn btn-ghost" id="btnPrev">← Back</button>
+    </div>
+    <div class="controls-right">
+      <button class="btn btn-ghost" id="btnReset">Reset</button>
+      <button class="btn btn-primary" id="btnNext">Next step →</button>
+    </div>
+  </div>
+
+  <footer>Built as a teaching aid · fictional "Nimbusly" support docs · scores are a simplified keyword-overlap stand-in for cosine similarity</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- Knowledge base ---------------- */
+  const KB = [
+    { id:1, topic:"Storage limits", tags:["storage","space","limit","gb","quota","free"],
+      text:"Free accounts include 15GB of storage. Paid plans start at 100GB for $2.99/month, with tiers up to 2TB.",
+      snippet:"Free accounts get 15GB, and paid plans start at 100GB for $2.99/month, scaling up to 2TB.",
+      coord:[110,90] },
+    { id:2, topic:"Upgrading storage", tags:["upgrade","more","storage","buy","plan","increase"],
+      text:"To get more storage, open Settings > Plan and select a higher tier. Upgrades apply instantly.",
+      snippet:"You can upgrade any time from Settings → Plan — the extra space applies instantly.",
+      coord:[165,145] },
+    { id:3, topic:"Password reset", tags:["password","forgot","reset","login","locked","account","sign"],
+      text:"Users can reset their password from the login screen by clicking 'Forgot password' and following the emailed link, valid for 30 minutes.",
+      snippet:"Click “Forgot password” on the login screen — the reset link we email you is valid for 30 minutes.",
+      coord:[530,95] },
+    { id:4, topic:"Two-factor login", tags:["login","security","2fa","two-factor","verification","sign","account"],
+      text:"Two-factor authentication can be enabled under Settings > Security and uses SMS or an authenticator app.",
+      snippet:"For extra security, two-factor authentication is available under Settings → Security via SMS or an authenticator app.",
+      coord:[575,150] },
+    { id:5, topic:"Deleted file retention", tags:["delete","deleted","recover","trash","retention","recycle","restore","gone"],
+      text:"Deleted files stay in Trash for 30 days before permanent removal. They can be restored anytime within that window.",
+      snippet:"Deleted files sit in Trash for 30 days and can be restored any time before that window closes.",
+      coord:[330,385] },
+    { id:6, topic:"File sharing", tags:["share","sharing","link","collaborate","permission","invite"],
+      text:"Files can be shared via a link with view or edit permissions, or directly invited by email to collaborate.",
+      snippet:"You can share a file via a link (view or edit access) or invite someone directly by email.",
+      coord:[315,430] },
+    { id:7, topic:"Billing cycle", tags:["billing","invoice","charge","payment","subscription","renew","refund","cancel"],
+      text:"Subscriptions renew monthly on the signup date. Invoices are emailed and available under Billing > History.",
+      snippet:"Your subscription renews monthly on your original signup date, and invoices are always available under Billing → History.",
+      coord:[115,460] },
+    { id:8, topic:"Support hours", tags:["support","help","contact","hours","chat","ticket"],
+      text:"Live chat support is available 9am–9pm ET, Monday to Friday. Email tickets are answered within 24 hours any day.",
+      snippet:"Live chat runs 9am–9pm ET on weekdays, and email tickets get a reply within 24 hours, any day.",
+      coord:[590,440] },
+  ];
+
+  const PRESETS = [
+    "How do I get more storage space?",
+    "I forgot my password",
+    "How long until deleted files are gone for good?",
+    "Can I share a file with someone?",
+    "When does my subscription renew?",
+    "What are your support hours?"
+  ];
+
+  const PLOT_W = 640, PLOT_H = 500;
+  const STOPWORDS = new Set(["the","is","a","an","to","of","my","i","how","do","does","can","when","what","are","your","for","me","get","on","in","it","and","or","you","will","until","gone"]);
+
+  /* ---------------- State ---------------- */
+  let step = 1;
+  const maxStep = 6;
+  let state = { query:"", scored:[], top3:[], hasRun:false, queryCoord:[320,250] };
+
+  /* ---------------- Helpers ---------------- */
+  function tokenize(text){
+    return text.toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(w => w && !STOPWORDS.has(w));
+  }
+
+  function scoreChunks(query){
+    const tokens = tokenize(query);
+    return KB.map(chunk => {
+      let count = 0;
+      chunk.tags.forEach(tag => {
+        if (tokens.some(t => t === tag || t.includes(tag) || tag.includes(t))) count++;
+      });
+      const sim = count === 0 ? 0 : count/(count+1.4);
+      return { chunk, count, sim: Math.min(sim, 0.97) };
+    }).sort((a,b) => b.sim - a.sim || a.chunk.id - b.chunk.id);
+  }
+
+  function weightedQueryCoord(scored){
+    const active = scored.filter(s => s.sim > 0);
+    if (!active.length) return [320, 250];
+    let sx=0, sy=0, sw=0;
+    active.forEach(s => { const w = s.sim; sx += s.chunk.coord[0]*w; sy += s.chunk.coord[1]*w; sw += w; });
+    return [sx/sw, sy/sw];
+  }
+
+  function pseudoVector(seedStr){
+    let h = 0;
+    for (let i=0;i<seedStr.length;i++){ h = (h*31 + seedStr.charCodeAt(i)) >>> 0; }
+    const nums = [];
+    for (let i=0;i<6;i++){
+      h = (h*1103515245 + 12345) >>> 0;
+      nums.push(((h % 2000)/1000 - 1).toFixed(3));
+    }
+    return nums;
+  }
+
+  function runQuery(q){
+    state.query = q;
+    state.scored = scoreChunks(q);
+    state.top3 = state.scored.slice(0,3);
+    state.queryCoord = weightedQueryCoord(state.scored);
+    state.hasRun = true;
+  }
+
+  /* ---------------- Stepper ---------------- */
+  const STEP_LABELS = ["Ask", "Embed", "Search", "Retrieve", "Augment", "Generate"];
+  const stepperEl = document.getElementById("stepper");
+  function renderStepper(){
+    stepperEl.innerHTML = "";
+    STEP_LABELS.forEach((label, i) => {
+      const n = i+1;
+      const btn = document.createElement("button");
+      btn.className = "step-node" + (n === step ? " active" : "") + (n < step ? " done" : "");
+      btn.disabled = n > step && !(n === step+1 && canAdvance());
+      btn.innerHTML = `<div class="circle">${n < step ? "✓" : n}</div><div class="line"></div><div class="lbl">${label}</div>`;
+      btn.addEventListener("click", () => { if (n <= step) { step = n; render(); } });
+      stepperEl.appendChild(btn);
+    });
+  }
+
+  function canAdvance(){
+    if (step === 1) return state.hasRun;
+    return true;
+  }
+
+  /* ---------------- SVG plot builder ---------------- */
+  function buildPlotSVG(opts){
+    opts = opts || {};
+    const showQuery = !!opts.showQuery;
+    const showLines = !!opts.showLines;
+    const dimNonTop = !!opts.dimNonTop;
+    const topIds = state.top3.map(s => s.chunk.id);
+
+    let grid = "";
+    for (let x=0;x<=PLOT_W;x+=80) grid += `<line class="grid-line" x1="${x}" y1="0" x2="${x}" y2="${PLOT_H}"/>`;
+    for (let y=0;y<=PLOT_H;y+=80) grid += `<line class="grid-line" x1="0" y1="${y}" x2="${PLOT_W}" y2="${y}"/>`;
+
+    let lines = "";
+    if (showLines){
+      state.scored.forEach((s, idx) => {
+        const isTop = topIds.includes(s.chunk.id);
+        const [cx,cy] = s.chunk.coord;
+        const [qx,qy] = state.queryCoord;
+        const mx = (cx+qx)/2, my = (cy+qy)/2;
+        const delay = (idx*0.06).toFixed(2);
+        lines += `<line class="sim-line${isTop?" top":""}" x1="${qx}" y1="${qy}" x2="${cx}" y2="${cy}"
+          style="animation: lineIn 0.5s ease ${delay}s forwards"/>`;
+        if (isTop){
+          lines += `<text class="sim-label" x="${mx}" y="${my-6}" text-anchor="middle"
+            style="animation: lblIn 0.5s ease ${(parseFloat(delay)+0.15).toFixed(2)}s forwards">${Math.round(s.sim*100)}%</text>`;
+        }
+      });
+    }
+
+    let dots = "";
+    KB.forEach(chunk => {
+      const isTop = topIds.includes(chunk.id) && (showLines || opts.stage==='retrieve');
+      const dim = dimNonTop && !isTop;
+      dots += `<circle class="chunk-dot${isTop?" top":""}${dim?" dim":""}" cx="${chunk.coord[0]}" cy="${chunk.coord[1]}" r="6"/>`;
+      dots += `<text class="chunk-label" x="${chunk.coord[0]+11}" y="${chunk.coord[1]+3}">${chunk.topic}</text>`;
+    });
+
+    let qdot = "";
+    if (showQuery){
+      qdot = `<circle class="query-dot" cx="${state.queryCoord[0]}" cy="${state.queryCoord[1]}" r="7">
+        <animate attributeName="r" values="0;9;7" dur="0.5s" fill="freeze"/>
+      </circle>
+      <text class="chunk-label" x="${state.queryCoord[0]+12}" y="${state.queryCoord[1]-8}" style="fill:#ffa857">your query</text>`;
+    }
+
+    return `<svg viewBox="0 0 ${PLOT_W} ${PLOT_H}" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        @keyframes lineIn { to { opacity: 0.85; } }
+        @keyframes lblIn { to { opacity: 1; } }
+      </style>
+      ${grid}${lines}${dots}${qdot}
+    </svg>`;
+  }
+
+  function plotLegend(){
+    return `<div class="legend">
+      <span><i style="background:var(--cyan)"></i>Chunk vectors (indexed)</span>
+      <span><i style="background:var(--amber)"></i>Query vector</span>
+      <span><i style="background:var(--green)"></i>Top matches</span>
+    </div>`;
+  }
+
+  /* ---------------- Step renderers ---------------- */
+  const stageEl = document.getElementById("stage");
+
+  function renderStep1(){
+    let chips = PRESETS.map(p => `<button class="chip" data-preset="${p.replace(/"/g,'&quot;')}">${p}</button>`).join("");
+    stageEl.innerHTML = `
+      <div class="stage-head">
+        <div class="kicker">Step 1 · Ask</div>
+        <h2>Ask a question</h2>
+        <p>This is the <strong>only new information</strong> in the entire pipeline. Every chunk, vector, and the database itself were already prepared in Stage A, long before this moment.</p>
+      </div>
+      <div class="stage-body">
+        <div class="query-panel">
+          <div class="query-row">
+            <input type="text" id="queryInput" placeholder="Type a question, e.g. how do I reset my password?" value="${state.query.replace(/"/g,'&quot;')}" />
+            <button class="btn btn-primary" id="btnRun">Run query</button>
+          </div>
+          <div class="chips-label">Or try one of these</div>
+          <div class="chips">${chips}</div>
+        </div>
+      </div>
+    `;
+    const input = document.getElementById("queryInput");
+    const run = () => {
+      const val = input.value.trim();
+      if (!val) return;
+      runQuery(val);
+      renderStepper();
+      document.getElementById("btnNext").disabled = false;
+    };
+    document.getElementById("btnRun").addEventListener("click", run);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") run(); });
+    stageEl.querySelectorAll(".chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        input.value = chip.dataset.preset;
+        run();
+      });
+    });
+  }
+
+  function renderStep2(){
+    const vec = pseudoVector(state.query);
+    stageEl.innerHTML = `
+      <div class="stage-head">
+        <div class="kicker">Step 2 · Embed</div>
+        <h2>Convert the query into a vector</h2>
+        <p>The <strong>same embedding model</strong> that converted every chunk into a vector during indexing now converts your query into a vector, in that same coordinate space.</p>
+      </div>
+      <div class="stage-body">
+        <div class="plot-col">
+          <div class="plot-frame">${buildPlotSVG({showQuery:true})}</div>
+          ${plotLegend()}
+        </div>
+        <div class="info-col">
+          <div class="vec-readout">
+            <span class="tag">Your question</span>
+            “${state.query}”
+          </div>
+          <div class="vec-readout">
+            <span class="tag">Embedding (truncated)</span>
+            [ ${vec.join(", ")}, … +506 more dimensions ]
+          </div>
+          <div class="vec-readout" style="color:var(--amber)">
+            <span class="tag" style="color:var(--text-faint)">Plotted position (2D, simplified)</span>
+            x: ${state.queryCoord[0].toFixed(0)}&nbsp;&nbsp;y: ${state.queryCoord[1].toFixed(0)}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep3(){
+    stageEl.innerHTML = `
+      <div class="stage-head">
+        <div class="kicker">Step 3 · Search</div>
+        <h2>Compare against every chunk vector</h2>
+        <p>The system measures how close the query vector sits to <strong>every chunk vector</strong> and ranks them by similarity. Closer = more relevant.</p>
+      </div>
+      <div class="stage-body">
+        <div class="plot-col">
+          <div class="plot-frame">${buildPlotSVG({showQuery:true, showLines:true, dimNonTop:true})}</div>
+          ${plotLegend()}
+        </div>
+        <div class="info-col">
+          <div class="chips-label">Ranked by similarity</div>
+          <div class="rank-list">
+            ${state.scored.map((s,i) => `
+              <div class="rank-item${i<3?" top":""}">
+                <div class="rank-topic">${s.chunk.topic}</div>
+                <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${Math.round(s.sim*100)}%"></div></div>
+                <div class="rank-score">${Math.round(s.sim*100)}%</div>
+                ${i<3 ? '<span class="rank-badge">TOP '+(i+1)+'</span>' : ''}
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep4(){
+    stageEl.innerHTML = `
+      <div class="stage-head">
+        <div class="kicker">Step 4 · Retrieve</div>
+        <h2>Pull the top-ranked chunks forward</h2>
+        <p>Only the <strong>text</strong> of the top 3 chunks is retrieved. Nothing else in the knowledge base is touched or sent anywhere.</p>
+      </div>
+      <div class="stage-body">
+        <div class="plot-col">
+          <div class="plot-frame">${buildPlotSVG({showQuery:true, showLines:false, dimNonTop:true, stage:'retrieve'})}</div>
+          ${plotLegend()}
+        </div>
+        <div class="info-col">
+          <div class="chips-label">Retrieved context (top 3)</div>
+          ${state.top3.map((s,i) => `
+            <div class="chunk-card" style="animation-delay:${i*0.12}s">
+              <div class="chunk-card-head">
+                <span class="chunk-card-topic">${s.chunk.topic}</span>
+                <span class="chunk-card-num">#${i+1} · ${Math.round(s.sim*100)}% match</span>
+              </div>
+              <div class="chunk-card-text">${s.chunk.text}</div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep5(){
+    const blocks = [
+      `<div class="prompt-block" style="animation-delay:0s">
+        <span class="prompt-tag tag-system">SYSTEM</span><br/>
+        Answer the user's question using only the context below. If the context doesn't cover it, say so.
+      </div>`,
+      `<div class="prompt-block" style="animation-delay:0.25s">
+        <span class="prompt-tag tag-context">RETRIEVED CONTEXT</span><br/>
+        ${state.top3.map((s,i) => `<div class="prompt-context-item"><b>[${i+1}] ${s.chunk.topic}</b> — ${s.chunk.text}</div>`).join("")}
+      </div>`,
+      `<div class="prompt-block" style="animation-delay:0.5s">
+        <span class="prompt-tag tag-user">USER QUESTION</span><br/>
+        ${state.query}
+      </div>`
+    ].join("");
+    stageEl.innerHTML = `
+      <div class="stage-head">
+        <div class="kicker">Step 5 · Augment</div>
+        <h2>Assemble the augmented prompt</h2>
+        <p>This is the step that gives RAG its name. The retrieved text is <strong>combined with your question</strong> into one prompt — this whole block is what the language model actually reads.</p>
+      </div>
+      <div class="stage-body">
+        <div class="prompt-box">${blocks}</div>
+      </div>
+    `;
+  }
+
+  function renderStep6(){
+    const hasMatch = state.top3.some(s => s.sim > 0);
+    stageEl.innerHTML = `
+      <div class="stage-head">
+        <div class="kicker">Step 6 · Generate</div>
+        <h2>The model writes a grounded answer</h2>
+        <p>The LLM reads the augmented prompt and generates an answer <strong>using the retrieved text as its source</strong> — which is why it can cite real content instead of relying purely on what it memorized during training.</p>
+      </div>
+      <div class="stage-body">
+        <div class="answer-wrap">
+          <div class="thinking" id="thinking"><span>Generating</span><span class="dots"><i></i><i></i><i></i></span></div>
+          <div class="answer-box" id="answerBox" style="display:none;"></div>
+          <div class="answer-note">
+            <span>💡</span>
+            <span>${hasMatch ? "Each sentence traces back to a specific retrieved chunk — shown by the citation tags." : "No strong keyword overlap was found for this question, so the answer below is built from the closest available chunks anyway. A well-built RAG system would instead say it doesn't have relevant information."}</span>
+          </div>
+        </div>
+      </div>
+    `;
+    setTimeout(() => {
+      const thinking = document.getElementById("thinking");
+      const box = document.getElementById("answerBox");
+      if (thinking) thinking.style.display = "none";
+      if (box){
+        box.style.display = "block";
+        box.innerHTML = state.top3.map((s,i) =>
+          `<div class="answer-snippet" style="animation-delay:${i*0.35}s">${s.chunk.snippet}<span class="cite">[${i+1}]</span></div>`
+        ).join("");
+      }
+    }, 750);
+  }
+
+  /* ---------------- Render dispatcher ---------------- */
+  function render(){
+    renderStepper();
+    if (step === 1) renderStep1();
+    else if (step === 2) renderStep2();
+    else if (step === 3) renderStep3();
+    else if (step === 4) renderStep4();
+    else if (step === 5) renderStep5();
+    else if (step === 6) renderStep6();
+
+    document.getElementById("btnPrev").disabled = step === 1;
+    const nextBtn = document.getElementById("btnNext");
+    nextBtn.disabled = !canAdvance();
+    nextBtn.textContent = step === maxStep ? "Restart with new question →" : "Next step →";
+  }
+
+  document.getElementById("btnPrev").addEventListener("click", () => {
+    if (step > 1) { step--; render(); }
+  });
+  document.getElementById("btnNext").addEventListener("click", () => {
+    if (step === maxStep){ step = 1; render(); return; }
+    if (canAdvance() && step < maxStep) { step++; render(); }
+  });
+  document.getElementById("btnReset").addEventListener("click", () => {
+    step = 1; state = { query:"", scored:[], top3:[], hasRun:false, queryCoord:[320,250] }; render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
